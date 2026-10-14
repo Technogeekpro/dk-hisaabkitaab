@@ -8,18 +8,21 @@ class Product {
     required this.name,
     required this.cost,
     required this.price,
+    this.emoji = '📱',
   });
 
   final String id;
   final String name;
   final double cost;
   final double price;
+  final String emoji;
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
     id: json['id'] as String,
     name: json['name'] as String,
     cost: (json['cost'] as num).toDouble(),
     price: (json['price'] as num).toDouble(),
+    emoji: json['emoji'] as String? ?? '📱',
   );
 
   Map<String, dynamic> toJson() => {
@@ -27,6 +30,7 @@ class Product {
     'name': name,
     'cost': cost,
     'price': price,
+    'emoji': emoji,
   };
 }
 
@@ -38,6 +42,7 @@ class Sale {
     required this.price,
     required this.quantity,
     required this.date,
+    this.productEmoji = '📱',
   });
 
   final String id;
@@ -46,6 +51,7 @@ class Sale {
   final double price;
   final int quantity;
   final DateTime date;
+  final String productEmoji;
 
   double get revenue => price * quantity;
   double get totalCost => cost * quantity;
@@ -58,6 +64,7 @@ class Sale {
     price: (json['price'] as num).toDouble(),
     quantity: json['quantity'] as int,
     date: DateTime.parse(json['date'] as String),
+    productEmoji: json['productEmoji'] as String? ?? '📱',
   );
 
   Map<String, dynamic> toJson() => {
@@ -67,6 +74,7 @@ class Sale {
     'price': price,
     'quantity': quantity,
     'date': date.toIso8601String(),
+    'productEmoji': productEmoji,
   };
 }
 

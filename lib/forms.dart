@@ -18,6 +18,7 @@ class _ProductFormState extends State<ProductForm> {
   late final TextEditingController _name;
   late final TextEditingController _cost;
   late final TextEditingController _price;
+  late final TextEditingController _emoji;
 
   @override
   void initState() {
@@ -27,6 +28,7 @@ class _ProductFormState extends State<ProductForm> {
     _price = TextEditingController(
       text: widget.product?.price.toString() ?? '',
     );
+    _emoji = TextEditingController(text: widget.product?.emoji ?? '📱');
   }
 
   @override
@@ -34,6 +36,7 @@ class _ProductFormState extends State<ProductForm> {
     _name.dispose();
     _cost.dispose();
     _price.dispose();
+    _emoji.dispose();
     super.dispose();
   }
 
@@ -63,6 +66,33 @@ class _ProductFormState extends State<ProductForm> {
             ),
             const SizedBox(height: 24),
             TextFormField(
+              controller: _emoji,
+              maxLength: 1,
+              maxLengthEnforcement: MaxLengthEnforcement.enforced,
+              decoration: const InputDecoration(
+                labelText: 'Product emoji',
+                helperText: 'Choose below or type any emoji',
+              ),
+              validator: (value) =>
+                  value == null ||
+                      value.trim().isEmpty ||
+                      value.characters.length != 1
+                  ? 'Choose one emoji'
+                  : null,
+            ),
+            Wrap(
+              spacing: 8,
+              children: ['📱', '🎨', '✨', '🖤', '🛡️', '💎', '🔥', '🌈']
+                  .map(
+                    (emoji) => ActionChip(
+                      label: Text(emoji, style: const TextStyle(fontSize: 20)),
+                      onPressed: () => setState(() => _emoji.text = emoji),
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
               controller: _name,
               maxLength: 100,
               textCapitalization: TextCapitalization.words,
@@ -91,6 +121,7 @@ class _ProductFormState extends State<ProductForm> {
                     name: _name.text.trim(),
                     cost: double.parse(_cost.text),
                     price: double.parse(_price.text),
+                    emoji: _emoji.text,
                   ),
                 );
               },
@@ -120,6 +151,7 @@ class _SaleFormState extends State<SaleForm> {
   late Product _selected;
   late final TextEditingController _price;
   late final TextEditingController _quantity;
+  DateTime _date = DateTime.now();
 
   @override
   void initState() {
@@ -134,6 +166,33 @@ class _SaleFormState extends State<SaleForm> {
     _price.dispose();
     _quantity.dispose();
     super.dispose();
+  }
+
+  Future<void> _chooseProduct() async {
+    final product = await showModalBottomSheet<Product>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        final availableHeight =
+            MediaQuery.sizeOf(sheetContext).height -
+            MediaQuery.viewInsetsOf(sheetContext).bottom;
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: SizedBox(
+            height: availableHeight * 0.72,
+            child: ProductSearchSheet(products: widget.products),
+          ),
+        );
+      },
+    );
+    if (product == null || !mounted) return;
+    setState(() {
+      _selected = product;
+      _price.text = product.price.toString();
+    });
   }
 
   @override
@@ -165,29 +224,20 @@ class _SaleFormState extends State<SaleForm> {
                 style: TextStyle(color: Color(0xFF64748B)),
               ),
               const SizedBox(height: 24),
-              DropdownButtonFormField<String>(
-                initialValue: _selected.id,
-                decoration: const InputDecoration(labelText: 'Product'),
-                items: widget.products
-                    .map(
-                      (product) => DropdownMenuItem(
-                        value: product.id,
-                        child: Text(
-                          product.name,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (id) {
-                  if (id == null) return;
-                  setState(() {
-                    _selected = widget.products.firstWhere(
-                      (item) => item.id == id,
-                    );
-                    _price.text = _selected.price.toString();
-                  });
-                },
+              OutlinedButton(
+                onPressed: _chooseProduct,
+                style: OutlinedButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                  padding: const EdgeInsets.all(16),
+                ),
+                child: Row(
+                  children: [
+                    Text(_selected.emoji, style: const TextStyle(fontSize: 24)),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(_selected.name)),
+                    const Icon(Icons.search),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -210,6 +260,12 @@ class _SaleFormState extends State<SaleForm> {
                 validator: (value) => (int.tryParse(value ?? '') ?? 0) < 1
                     ? 'Enter a quantity of at least 1'
                     : null,
+              ),
+              const SizedBox(height: 14),
+              DatePickerRow(
+                date: _date,
+                label: 'Sale date',
+                onChanged: (date) => setState(() => _date = date),
               ),
               const SizedBox(height: 18),
               surface(
@@ -241,10 +297,11 @@ class _SaleFormState extends State<SaleForm> {
                     Sale(
                       id: DateTime.now().microsecondsSinceEpoch.toString(),
                       productName: _selected.name,
+                      productEmoji: _selected.emoji,
                       cost: _selected.cost,
                       price: double.parse(_price.text),
                       quantity: int.parse(_quantity.text),
-                      date: DateTime.now(),
+                      date: _date,
                     ),
                   );
                 },
@@ -257,6 +314,75 @@ class _SaleFormState extends State<SaleForm> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class ProductSearchSheet extends StatefulWidget {
+  const ProductSearchSheet({super.key, required this.products});
+
+  final List<Product> products;
+
+  @override
+  State<ProductSearchSheet> createState() => _ProductSearchSheetState();
+}
+
+class _ProductSearchSheetState extends State<ProductSearchSheet> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _search.text.trim().toLowerCase();
+    final matches = widget.products
+        .where((product) => product.name.toLowerCase().contains(query))
+        .toList();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Find a product',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _search,
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Search products',
+              prefixIcon: Icon(Icons.search),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: matches.isEmpty
+                ? const Center(child: Text('No matching products'))
+                : ListView.builder(
+                    itemCount: matches.length,
+                    itemBuilder: (context, index) {
+                      final product = matches[index];
+                      return ListTile(
+                        leading: Text(
+                          product.emoji,
+                          style: const TextStyle(fontSize: 26),
+                        ),
+                        title: Text(product.name),
+                        subtitle: Text('Sell ${money(product.price)}'),
+                        onTap: () => Navigator.pop(context, product),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -458,10 +584,16 @@ class _PaymentFormState extends State<PaymentForm> {
 }
 
 class DatePickerRow extends StatelessWidget {
-  const DatePickerRow({super.key, required this.date, required this.onChanged});
+  const DatePickerRow({
+    super.key,
+    required this.date,
+    required this.onChanged,
+    this.label = 'Date',
+  });
 
   final DateTime date;
   final ValueChanged<DateTime> onChanged;
+  final String label;
 
   @override
   Widget build(BuildContext context) => OutlinedButton.icon(
@@ -475,7 +607,7 @@ class DatePickerRow extends StatelessWidget {
       if (picked != null) onChanged(picked);
     },
     icon: const Icon(Icons.calendar_month_outlined),
-    label: Text('Date: ${DateFormat('d MMM yyyy').format(date)}'),
+    label: Text('$label: ${DateFormat('d MMM yyyy').format(date)}'),
     style: OutlinedButton.styleFrom(
       alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),

@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'cloud_store.dart';
 import 'data.dart';
 import 'forms.dart';
+import 'sales_heatmap.dart';
 import 'sign_in.dart';
 
 Future<void> main() async {
@@ -155,6 +156,7 @@ class _HomePageState extends State<HomePage> {
   final List<Payment> _payments = [];
   int _tab = 0;
   ProfitPeriod _period = ProfitPeriod.today;
+  DateTime? _selectedSalesDay;
   bool _loading = true;
   String? _loadError;
 
@@ -269,7 +271,13 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _sales.insert(0, sale);
       _sales.sort((a, b) => b.date.compareTo(a.date));
-      _tab = 0;
+      if (salesDay(sale.date) == salesDay(DateTime.now())) {
+        _selectedSalesDay = null;
+        _tab = 0;
+      } else {
+        _selectedSalesDay = salesDay(sale.date);
+        _tab = 1;
+      }
     });
     _save();
     if (mounted) {
@@ -800,71 +808,219 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildSales() => ListView(
-    padding: const EdgeInsets.fromLTRB(20, 22, 20, 110),
-    children: [
-      _pageHeading('Sales & expenses', 'Record daily sales and other costs'),
-      const SizedBox(height: 18),
-      OutlinedButton.icon(
-        onPressed: _showExpenseForm,
-        icon: const Icon(Icons.add),
-        label: const Text('Add expense'),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-        ),
-      ),
-      const SizedBox(height: 24),
-      const Text(
-        'Sales',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-      ),
-      const SizedBox(height: 12),
-      if (_sales.isEmpty)
-        _emptyCard('No sales yet', 'Record a sale to see it here.')
-      else
-        ..._sales.map(
-          (sale) => Dismissible(
-            key: ValueKey(sale.id),
-            direction: DismissDirection.endToStart,
-            confirmDismiss: (_) =>
-                _confirmAndDelete('sale', 'dk_sales', sale.id),
-            onDismissed: (_) => _deleteSale(sale),
-            background: Container(
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 24),
-              margin: const EdgeInsets.only(bottom: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFC94444),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Icon(Icons.delete_outline, color: Colors.white),
-            ),
-            child: _saleTile(sale),
-          ),
-        ),
-      const SizedBox(height: 24),
-      const Text(
-        'Other expenses',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-      ),
-      const SizedBox(height: 12),
-      if (_expenses.isEmpty)
-        _emptyCard(
-          'No expenses yet',
-          'Tap Add expense to record a cost with a note.',
+  Widget _buildSales() {
+    final now = DateTime.now();
+    final monthSales = _sales
+        .where(
+          (sale) => sale.date.year == now.year && sale.date.month == now.month,
         )
-      else
-        ..._expenses.map(
-          (expense) => Dismissible(
-            key: ValueKey(expense.id),
-            direction: DismissDirection.endToStart,
-            confirmDismiss: (_) =>
-                _confirmAndDelete('expense', 'dk_expenses', expense.id),
-            onDismissed: (_) => _deleteExpense(expense),
-            background: _deleteBackground(),
-            child: _expenseTile(expense),
+        .toList();
+    final monthRevenue = monthSales.fold<double>(
+      0,
+      (sum, sale) => sum + sale.revenue,
+    );
+    final monthProfit = monthSales.fold<double>(
+      0,
+      (sum, sale) => sum + sale.profit,
+    );
+    final monthUnits = monthSales.fold<int>(
+      0,
+      (sum, sale) => sum + sale.quantity,
+    );
+    final daily = summarizeSalesByDay(_sales);
+    final monthDaily = summarizeSalesByDay(monthSales);
+    final bestDay = monthDaily.entries.isEmpty
+        ? null
+        : monthDaily.entries.reduce(
+            (best, entry) =>
+                entry.value.revenue > best.value.revenue ? entry : best,
+          );
+    final groupedSales = <DateTime, List<Sale>>{};
+    for (final sale in _sales) {
+      groupedSales.putIfAbsent(salesDay(sale.date), () => []).add(sale);
+    }
+    final visibleDays =
+        daily.keys
+            .where(
+              (day) => _selectedSalesDay == null || day == _selectedSalesDay,
+            )
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 110),
+      children: [
+        _pageHeading(
+          'Sales & expenses',
+          'See your patterns and record daily costs',
+        ),
+        const SizedBox(height: 18),
+        surface(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'THIS MONTH · ${DateFormat('MMMM yyyy').format(now).toUpperCase()}',
+                style: const TextStyle(
+                  color: Color(0xFF64748B),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: _salesMetric('Revenue', money(monthRevenue))),
+                  Expanded(
+                    child: _salesMetric('Gross profit', money(monthProfit)),
+                  ),
+                ],
+              ),
+              const Divider(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: _salesMetric('Sales', '${monthSales.length}'),
+                  ),
+                  Expanded(child: _salesMetric('Items sold', '$monthUnits')),
+                ],
+              ),
+              if (bestDay != null) ...[
+                const SizedBox(height: 14),
+                Text(
+                  'Best day this month: ${DateFormat('d MMM yyyy').format(bestDay.key)} · ${money(bestDay.value.revenue)} revenue',
+                  style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
+        const SizedBox(height: 16),
+        SalesHeatmap(
+          sales: _sales,
+          selectedDay: _selectedSalesDay,
+          onDaySelected: (day) => setState(() {
+            _selectedSalesDay = _selectedSalesDay == day ? null : day;
+          }),
+        ),
+        const SizedBox(height: 22),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _selectedSalesDay == null
+                    ? 'Sales history'
+                    : 'Sales on ${DateFormat('d MMM yyyy').format(_selectedSalesDay!)}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            if (_selectedSalesDay != null)
+              TextButton(
+                onPressed: () => setState(() => _selectedSalesDay = null),
+                child: const Text('Show all'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (visibleDays.isEmpty)
+          _emptyCard(
+            _sales.isEmpty ? 'No sales yet' : 'No sales on this day',
+            _sales.isEmpty
+                ? 'Record a sale to see it here.'
+                : 'Choose another day or show all sales.',
+          )
+        else
+          for (final day in visibleDays) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 10, 2, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      DateFormat('EEE, d MMM yyyy').format(day),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    '${daily[day]!.transactions} sale${daily[day]!.transactions == 1 ? '' : 's'} · ${money(daily[day]!.revenue)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final sale in groupedSales[day]!)
+              Dismissible(
+                key: ValueKey(sale.id),
+                direction: DismissDirection.endToStart,
+                confirmDismiss: (_) =>
+                    _confirmAndDelete('sale', 'dk_sales', sale.id),
+                onDismissed: (_) => _deleteSale(sale),
+                background: _deleteBackground(),
+                child: _saleTile(sale),
+              ),
+          ],
+        const SizedBox(height: 24),
+        const Text(
+          'Other expenses',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _showExpenseForm,
+          icon: const Icon(Icons.add),
+          label: const Text('Add expense'),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_expenses.isEmpty)
+          _emptyCard(
+            'No expenses yet',
+            'Tap Add expense to record a cost with a note.',
+          )
+        else
+          ..._expenses.map(
+            (expense) => Dismissible(
+              key: ValueKey(expense.id),
+              direction: DismissDirection.endToStart,
+              confirmDismiss: (_) =>
+                  _confirmAndDelete('expense', 'dk_expenses', expense.id),
+              onDismissed: (_) => _deleteExpense(expense),
+              background: _deleteBackground(),
+              child: _expenseTile(expense),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _salesMetric(String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+      ),
+      const SizedBox(height: 3),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          value,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+        ),
+      ),
     ],
   );
 
@@ -1003,7 +1159,12 @@ class _HomePageState extends State<HomePage> {
                     color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Icon(Icons.layers_outlined, color: brandInk),
+                  child: Center(
+                    child: Text(
+                      product.emoji,
+                      style: const TextStyle(fontSize: 25),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -1088,7 +1249,12 @@ class _HomePageState extends State<HomePage> {
               color: const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.phone_iphone_outlined, color: brandInk),
+            child: Center(
+              child: Text(
+                sale.productEmoji,
+                style: const TextStyle(fontSize: 24),
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1103,7 +1269,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${DateFormat('d MMM, h:mm a').format(sale.date)} · Qty ${sale.quantity}',
+                  '${DateFormat('d MMM yyyy').format(sale.date)} · Qty ${sale.quantity}',
                   style: const TextStyle(
                     color: Color(0xFF64748B),
                     fontSize: 12,

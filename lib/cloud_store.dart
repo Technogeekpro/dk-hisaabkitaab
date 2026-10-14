@@ -59,6 +59,7 @@ class CloudStore {
               name: row['name'] as String,
               cost: (row['cost'] as num).toDouble(),
               price: (row['price'] as num).toDouble(),
+              emoji: row['emoji'] as String? ?? '📱',
             ),
           )
           .toList(),
@@ -71,6 +72,7 @@ class CloudStore {
               price: (row['price'] as num).toDouble(),
               quantity: row['quantity'] as int,
               date: DateTime.parse(row['sold_at'] as String).toLocal(),
+              productEmoji: row['product_emoji'] as String? ?? '📱',
             ),
           )
           .toList(),
@@ -109,6 +111,7 @@ class CloudStore {
         'name': product.name,
         'cost': product.cost,
         'price': product.price,
+        'emoji': product.emoji,
       }, onConflict: 'owner_id,client_id');
 
   Future<void> saveSale(Sale sale) => client
@@ -122,6 +125,7 @@ class CloudStore {
           'price': sale.price,
           'quantity': sale.quantity,
           'sold_at': sale.date.toUtc().toIso8601String(),
+          'product_emoji': sale.productEmoji,
         },
         onConflict: 'owner_id,client_id',
         ignoreDuplicates: true,
