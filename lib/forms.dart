@@ -3,7 +3,51 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import 'data.dart';
-import 'main.dart';
+import 'settings.dart';
+import 'theme.dart';
+import 'ui.dart';
+
+/// Shared layout for every bottom-sheet form: title, subtitle, fields and a
+/// primary button, padded above the keyboard.
+class _SheetForm extends StatelessWidget {
+  const _SheetForm({
+    required this.formKey,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+  });
+
+  final GlobalKey<FormState> formKey;
+  final String title;
+  final String subtitle;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      20,
+      0,
+      20,
+      MediaQuery.viewInsetsOf(context).bottom + 20,
+    ),
+    child: Form(
+      key: formKey,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title, style: AppText.sheetTitle),
+            const SizedBox(height: 4),
+            Text(subtitle, style: AppText.label.copyWith(fontSize: 14)),
+            const SizedBox(height: 24),
+            ...children,
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
 class ProductForm extends StatefulWidget {
   const ProductForm({super.key, this.product});
@@ -14,15 +58,21 @@ class ProductForm extends StatefulWidget {
 }
 
 class _ProductFormState extends State<ProductForm> {
+  static const _emojis = ['📱', '🎨', '✨', '🖤', '🛡️', '💎', '🔥', '🌈'];
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _cost;
   late final TextEditingController _price;
   late final TextEditingController _emoji;
+  late final TextEditingController _incentive;
 
   @override
   void initState() {
     super.initState();
+    _incentive = TextEditingController(
+      text: _plain(widget.product?.incentive ?? defaultStaffIncentive),
+    );
     _name = TextEditingController(text: widget.product?.name ?? '');
     _cost = TextEditingController(text: widget.product?.cost.toString() ?? '');
     _price = TextEditingController(
@@ -37,101 +87,138 @@ class _ProductFormState extends State<ProductForm> {
     _cost.dispose();
     _price.dispose();
     _emoji.dispose();
+    _incentive.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(
-      22,
-      24,
-      22,
-      MediaQuery.viewInsetsOf(context).bottom + 24,
-    ),
-    child: Form(
-      key: _formKey,
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              widget.product == null ? 'Add product' : 'Edit product',
-              style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w800),
+  Widget build(BuildContext context) => _SheetForm(
+    formKey: _formKey,
+    title: widget.product == null ? 'Add product' : 'Edit product',
+    subtitle: 'Set the usual prices for this skin or wrap.',
+    children: [
+      TextFormField(
+        controller: _emoji,
+        maxLength: 1,
+        maxLengthEnforcement: MaxLengthEnforcement.enforced,
+        onChanged: (_) => setState(() {}),
+        decoration: const InputDecoration(
+          labelText: 'Emoji',
+          helperText: 'Pick one below or type any emoji',
+          counterText: '',
+        ),
+        validator: (value) =>
+            value == null ||
+                value.trim().isEmpty ||
+                value.characters.length != 1
+            ? 'Choose one emoji'
+            : null,
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final emoji in _emojis)
+            _EmojiChoice(
+              emoji: emoji,
+              selected: _emoji.text == emoji,
+              onTap: () => setState(() => _emoji.text = emoji),
             ),
-            const SizedBox(height: 5),
-            const Text(
-              'Set the usual prices for this skin or wrap.',
-              style: TextStyle(color: Color(0xFF64748B)),
+        ],
+      ),
+      const SizedBox(height: 20),
+      TextFormField(
+        controller: _name,
+        maxLength: 100,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(
+          labelText: 'Product name',
+          hintText: 'e.g. Matte black skin',
+          counterText: '',
+        ),
+        validator: (value) => value == null || value.trim().isEmpty
+            ? 'Enter a product name'
+            : null,
+      ),
+      const SizedBox(height: 16),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: priceField(_cost, 'Buying price')),
+          const SizedBox(width: 12),
+          Expanded(child: priceField(_price, 'Standard price')),
+        ],
+      ),
+      const SizedBox(height: 16),
+      priceField(_incentive, 'Staff incentive per item'),
+      const SizedBox(height: 6),
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          'Fixed amount staff get for each item they sell, even at a discount. '
+          'They also get ⅓ of anything sold above the standard price.',
+          style: AppText.caption,
+        ),
+      ),
+      const SizedBox(height: 24),
+      FilledButton(
+        onPressed: () {
+          if (!_formKey.currentState!.validate()) return;
+          Navigator.pop(
+            context,
+            Product(
+              id:
+                  widget.product?.id ??
+                  DateTime.now().microsecondsSinceEpoch.toString(),
+              name: _name.text.trim(),
+              cost: double.parse(_cost.text),
+              price: double.parse(_price.text),
+              emoji: _emoji.text,
+              incentive: double.parse(_incentive.text),
             ),
-            const SizedBox(height: 24),
-            TextFormField(
-              controller: _emoji,
-              maxLength: 1,
-              maxLengthEnforcement: MaxLengthEnforcement.enforced,
-              decoration: const InputDecoration(
-                labelText: 'Product emoji',
-                helperText: 'Choose below or type any emoji',
-              ),
-              validator: (value) =>
-                  value == null ||
-                      value.trim().isEmpty ||
-                      value.characters.length != 1
-                  ? 'Choose one emoji'
-                  : null,
-            ),
-            Wrap(
-              spacing: 8,
-              children: ['📱', '🎨', '✨', '🖤', '🛡️', '💎', '🔥', '🌈']
-                  .map(
-                    (emoji) => ActionChip(
-                      label: Text(emoji, style: const TextStyle(fontSize: 20)),
-                      onPressed: () => setState(() => _emoji.text = emoji),
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _name,
-              maxLength: 100,
-              textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(
-                labelText: 'Product name',
-                hintText: 'e.g. Matte black skin',
-              ),
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Enter a product name'
-                  : null,
-            ),
-            const SizedBox(height: 14),
-            priceField(_cost, 'Buying price (₹)'),
-            const SizedBox(height: 14),
-            priceField(_price, 'Usual selling price (₹)'),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: () {
-                if (!_formKey.currentState!.validate()) return;
-                Navigator.pop(
-                  context,
-                  Product(
-                    id:
-                        widget.product?.id ??
-                        DateTime.now().microsecondsSinceEpoch.toString(),
-                    name: _name.text.trim(),
-                    cost: double.parse(_cost.text),
-                    price: double.parse(_price.text),
-                    emoji: _emoji.text,
-                  ),
-                );
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: brandInk,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: const Text('Save product'),
-            ),
-          ],
+          );
+        },
+        child: const Text('Save product'),
+      ),
+    ],
+  );
+}
+
+class _EmojiChoice extends StatelessWidget {
+  const _EmojiChoice({
+    required this.emoji,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String emoji;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    label: 'Emoji $emoji',
+    child: Material(
+      color: selected ? AppColors.fill : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: selected ? AppColors.text : AppColors.border,
+          width: selected ? 1.5 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Center(
+            child: Text(emoji, style: const TextStyle(fontSize: 20)),
+          ),
         ),
       ),
     ),
@@ -152,6 +239,11 @@ class _SaleFormState extends State<SaleForm> {
   late final TextEditingController _price;
   late final TextEditingController _quantity;
   DateTime _date = DateTime.now();
+
+  /// Employee who made the sale; empty when no employee.
+  String _seller = staffMembers.contains(appSettings.lastSeller)
+      ? appSettings.lastSeller
+      : '';
 
   @override
   void initState() {
@@ -195,128 +287,203 @@ class _SaleFormState extends State<SaleForm> {
     });
   }
 
+  void _stepQuantity(int delta) {
+    final next = ((int.tryParse(_quantity.text) ?? 1) + delta).clamp(1, 999);
+    setState(() => _quantity.text = '$next');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final quantity = int.tryParse(_quantity.text) ?? 0;
-    final price = double.tryParse(_price.text) ?? 0;
-    final profit = (price - _selected.cost) * quantity;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        22,
-        24,
-        22,
-        MediaQuery.viewInsetsOf(context).bottom + 24,
-      ),
-      child: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Add a sale',
-                style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 5),
-              const Text(
-                'Choose the product and enter what you sold it for.',
-                style: TextStyle(color: Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 24),
-              OutlinedButton(
-                onPressed: _chooseProduct,
-                style: OutlinedButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.all(16),
-                ),
-                child: Row(
-                  children: [
-                    Text(_selected.emoji, style: const TextStyle(fontSize: 24)),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(_selected.name)),
-                    const Icon(Icons.search),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Buying price: ${money(_selected.cost)} each',
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-              ),
-              const SizedBox(height: 16),
-              priceField(
+    final draft = _draft(
+      price: double.tryParse(_price.text) ?? 0,
+      quantity: int.tryParse(_quantity.text) ?? 0,
+    );
+    final mine = draft.myShare;
+    return _SheetForm(
+      formKey: _formKey,
+      title: 'Add a sale',
+      subtitle: 'Choose the product and enter what you sold it for.',
+      children: [
+        _FieldButton(
+          onPressed: _chooseProduct,
+          leading: Text(_selected.emoji, style: const TextStyle(fontSize: 22)),
+          label: _selected.name,
+          caption: 'Buys at ${money(_selected.cost)}',
+          trailing: const Icon(
+            Icons.unfold_more_rounded,
+            color: AppColors.textMuted,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: priceField(
                 _price,
-                'Selling price per item (₹)',
+                'Selling price',
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 14),
-              TextFormField(
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
                 controller: _quantity,
                 keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(labelText: 'Quantity'),
+                decoration: InputDecoration(
+                  labelText: 'Qty',
+                  contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                  prefixIconConstraints: const BoxConstraints(minWidth: 40),
+                  suffixIconConstraints: const BoxConstraints(minWidth: 40),
+                  prefixIcon: IconButton(
+                    tooltip: 'Decrease quantity',
+                    onPressed: () => _stepQuantity(-1),
+                    icon: const Icon(Icons.remove_rounded, size: 18),
+                  ),
+                  suffixIcon: IconButton(
+                    tooltip: 'Increase quantity',
+                    onPressed: () => _stepQuantity(1),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                  ),
+                ),
                 onChanged: (_) => setState(() {}),
-                validator: (value) => (int.tryParse(value ?? '') ?? 0) < 1
-                    ? 'Enter a quantity of at least 1'
-                    : null,
+                validator: (value) =>
+                    (int.tryParse(value ?? '') ?? 0) < 1 ? 'At least 1' : null,
               ),
-              const SizedBox(height: 14),
-              DatePickerRow(
-                date: _date,
-                label: 'Sale date',
-                onChanged: (date) => setState(() => _date = date),
-              ),
-              const SizedBox(height: 18),
-              surface(
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Profit from this sale',
-                        style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const Text('Sold by', style: AppText.label),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<String>(
+            showSelectedIcon: false,
+            style: SegmentedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+            ),
+            segments: [
+              const ButtonSegment(value: '', label: Text('No one')),
+              for (final name in staffMembers)
+                ButtonSegment(value: name, label: Text(name)),
+            ],
+            selected: {_seller},
+            onSelectionChanged: (selection) =>
+                setState(() => _seller = selection.first),
+          ),
+        ),
+        const SizedBox(height: 16),
+        DatePickerRow(
+          date: _date,
+          label: 'Sale date',
+          onChanged: (date) => setState(() => _date = date),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: [
+              _previewRow('Profit from this sale', money(draft.profit)),
+              if (draft.seller != null)
+                _previewRow(
+                  '${draft.seller} gets',
+                  '−${money(draft.staffIncentive)}',
+                  caption: _incentiveBreakdown(draft),
+                ),
+              const Divider(height: 12),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'My profit (50%)',
+                      style: AppText.rowTitle.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    Text(
-                      money(profit),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 20,
-                        color: profit < 0 ? const Color(0xFFC94444) : brandInk,
-                      ),
+                  ),
+                  Text(
+                    money(mine),
+                    style: AppText.metric.copyWith(
+                      fontSize: 20,
+                      color: mine < 0 ? AppColors.negative : AppColors.positive,
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 22),
-              FilledButton(
-                onPressed: () {
-                  if (!_formKey.currentState!.validate()) return;
-                  Navigator.pop(
-                    context,
-                    Sale(
-                      id: DateTime.now().microsecondsSinceEpoch.toString(),
-                      productName: _selected.name,
-                      productEmoji: _selected.emoji,
-                      cost: _selected.cost,
-                      price: double.parse(_price.text),
-                      quantity: int.parse(_quantity.text),
-                      date: _date,
-                    ),
-                  );
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: brandInk,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text('Save sale'),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-      ),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+            appSettings.update(lastSeller: _seller);
+            Navigator.pop(
+              context,
+              _draft(
+                price: double.parse(_price.text),
+                quantity: int.parse(_quantity.text),
+              ),
+            );
+          },
+          child: const Text('Save sale'),
+        ),
+      ],
     );
   }
+
+  Sale _draft({required double price, required int quantity}) => Sale(
+    id: DateTime.now().microsecondsSinceEpoch.toString(),
+    productName: _selected.name,
+    productEmoji: _selected.emoji,
+    cost: _selected.cost,
+    price: price,
+    quantity: quantity,
+    date: _date,
+    seller: _seller.isEmpty ? null : _seller,
+    standardPrice: _selected.price,
+    incentivePerItem: _selected.incentive,
+  );
+
+  String _incentiveBreakdown(Sale sale) {
+    final fixed =
+        '${money(sale.incentivePerItem)} fixed${sale.quantity > 1 ? ' × ${sale.quantity}' : ''}';
+    if (sale.extraPerItem <= 0) return fixed;
+    final extra = sale.extraPerItem * sale.quantity;
+    return '$fixed + ⅓ of ${money(extra)} extra (${money(sale.extraIncentive)})';
+  }
+
+  Widget _previewRow(String label, String value, {String? caption}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: AppText.label.copyWith(fontSize: 14)),
+              if (caption != null) ...[
+                const SizedBox(height: 2),
+                Text(caption, style: AppText.caption),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(value, style: AppText.amount),
+      ],
+    ),
+  );
 }
 
 class ProductSearchSheet extends StatefulWidget {
@@ -344,39 +511,39 @@ class _ProductSearchSheetState extends State<ProductSearchSheet> {
         .where((product) => product.name.toLowerCase().contains(query))
         .toList();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Find a product',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-          ),
+          const Text('Find a product', style: AppText.sheetTitle),
           const SizedBox(height: 16),
           TextField(
             controller: _search,
             autofocus: true,
             onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
-              labelText: 'Search products',
-              prefixIcon: Icon(Icons.search),
+              hintText: 'Search products',
+              prefixIcon: Icon(Icons.search_rounded),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Expanded(
             child: matches.isEmpty
-                ? const Center(child: Text('No matching products'))
-                : ListView.builder(
+                ? const Center(
+                    child: Text('No matching products', style: AppText.label),
+                  )
+                : ListView.separated(
                     itemCount: matches.length,
+                    separatorBuilder: (_, _) => const Divider(indent: 52),
                     itemBuilder: (context, index) {
                       final product = matches[index];
                       return ListTile(
-                        leading: Text(
-                          product.emoji,
-                          style: const TextStyle(fontSize: 26),
-                        ),
+                        contentPadding: EdgeInsets.zero,
+                        leading: LeadingBadge(emoji: product.emoji),
                         title: Text(product.name),
-                        subtitle: Text('Sell ${money(product.price)}'),
+                        subtitle: Text(
+                          'Buy ${money(product.cost)} · Sell ${money(product.price)}',
+                        ),
                         onTap: () => Navigator.pop(context, product),
                       );
                     },
@@ -409,77 +576,54 @@ class _ExpenseFormState extends State<ExpenseForm> {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(
-      22,
-      24,
-      22,
-      MediaQuery.viewInsetsOf(context).bottom + 24,
-    ),
-    child: Form(
-      key: _formKey,
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Add expense',
-              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 5),
-            const Text(
-              'Expenses reduce the profit before the 50/50 split.',
-              style: TextStyle(color: Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 24),
-            priceField(_amount, 'Expense amount (₹)', allowZero: false),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _note,
-              maxLength: 100,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Short note',
-                hintText: 'e.g. Lamination material',
-              ),
-              validator: (value) => value == null || value.trim().isEmpty
-                  ? 'Enter a short note'
-                  : null,
-            ),
-            DatePickerRow(
-              date: _date,
-              onChanged: (date) => setState(() => _date = date),
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: () {
-                if (!_formKey.currentState!.validate()) return;
-                Navigator.pop(
-                  context,
-                  Expense(
-                    id: DateTime.now().microsecondsSinceEpoch.toString(),
-                    amount: double.parse(_amount.text),
-                    note: _note.text.trim(),
-                    date: _date,
-                  ),
-                );
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: brandInk,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: const Text('Save expense'),
-            ),
-          ],
+  Widget build(BuildContext context) => _SheetForm(
+    formKey: _formKey,
+    title: 'Add expense',
+    subtitle: 'Expenses reduce the profit before the 50/50 split.',
+    children: [
+      priceField(_amount, 'Amount', allowZero: false),
+      const SizedBox(height: 16),
+      TextFormField(
+        controller: _note,
+        maxLength: 100,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(
+          labelText: 'Short note',
+          hintText: 'e.g. Lamination material',
+          counterText: '',
         ),
+        validator: (value) =>
+            value == null || value.trim().isEmpty ? 'Enter a short note' : null,
       ),
-    ),
+      const SizedBox(height: 16),
+      DatePickerRow(
+        date: _date,
+        onChanged: (date) => setState(() => _date = date),
+      ),
+      const SizedBox(height: 24),
+      FilledButton(
+        onPressed: () {
+          if (!_formKey.currentState!.validate()) return;
+          Navigator.pop(
+            context,
+            Expense(
+              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              amount: double.parse(_amount.text),
+              note: _note.text.trim(),
+              date: _date,
+            ),
+          );
+        },
+        child: const Text('Save expense'),
+      ),
+    ],
   );
 }
 
 class PaymentForm extends StatefulWidget {
-  const PaymentForm({super.key});
+  const PaymentForm({super.key, this.partnerName = 'your brother'});
+
+  final String partnerName;
 
   @override
   State<PaymentForm> createState() => _PaymentFormState();
@@ -500,82 +644,229 @@ class _PaymentFormState extends State<PaymentForm> {
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(
-      22,
-      24,
-      22,
-      MediaQuery.viewInsetsOf(context).bottom + 24,
-    ),
-    child: Form(
-      key: _formKey,
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Record payment',
-              style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800),
+  Widget build(BuildContext context) => _SheetForm(
+    formKey: _formKey,
+    title: 'Record payment',
+    subtitle:
+        'Enter the actual amount ${widget.partnerName} paid you, including rounded amounts.',
+    children: [
+      priceField(_amount, 'Amount received', allowZero: false),
+      const SizedBox(height: 16),
+      SegmentedButton<PaymentMethod>(
+        showSelectedIcon: false,
+        segments: [
+          for (final method in PaymentMethod.values)
+            ButtonSegment(
+              value: method,
+              label: Text(method.label),
+              icon: Icon(
+                method == PaymentMethod.cash
+                    ? Icons.payments_outlined
+                    : Icons.account_balance_outlined,
+                size: 18,
+              ),
             ),
-            const SizedBox(height: 5),
-            const Text(
-              'Enter the actual amount your brother paid you, including rounded amounts.',
-              style: TextStyle(color: Color(0xFF64748B)),
-            ),
-            const SizedBox(height: 24),
-            priceField(_amount, 'Amount received (₹)', allowZero: false),
-            const SizedBox(height: 14),
-            DropdownButtonFormField<PaymentMethod>(
-              initialValue: _method,
-              decoration: const InputDecoration(labelText: 'Payment method'),
-              items: PaymentMethod.values
-                  .map(
-                    (method) => DropdownMenuItem(
-                      value: method,
-                      child: Text(method.label),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (method) {
-                if (method != null) setState(() => _method = method);
-              },
-            ),
-            const SizedBox(height: 14),
-            DatePickerRow(
+        ],
+        selected: {_method},
+        onSelectionChanged: (selection) =>
+            setState(() => _method = selection.first),
+      ),
+      const SizedBox(height: 16),
+      DatePickerRow(
+        date: _date,
+        onChanged: (date) => setState(() => _date = date),
+      ),
+      const SizedBox(height: 16),
+      TextFormField(
+        controller: _note,
+        maxLength: 100,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(
+          labelText: 'Note (optional)',
+          hintText: 'e.g. Weekly settlement',
+          counterText: '',
+        ),
+      ),
+      const SizedBox(height: 24),
+      FilledButton(
+        onPressed: () {
+          if (!_formKey.currentState!.validate()) return;
+          Navigator.pop(
+            context,
+            Payment(
+              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              amount: double.parse(_amount.text),
+              method: _method,
               date: _date,
-              onChanged: (date) => setState(() => _date = date),
+              note: _note.text.trim(),
             ),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _note,
-              maxLength: 100,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Note (optional)',
-                hintText: 'e.g. Weekly settlement',
-              ),
+          );
+        },
+        child: const Text('Save payment'),
+      ),
+    ],
+  );
+}
+
+class StaffPayoutForm extends StatefulWidget {
+  const StaffPayoutForm({
+    super.key,
+    required this.employee,
+    this.suggestedAmount = 0,
+  });
+
+  final String employee;
+  final double suggestedAmount;
+
+  @override
+  State<StaffPayoutForm> createState() => _StaffPayoutFormState();
+}
+
+class _StaffPayoutFormState extends State<StaffPayoutForm> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _amount = TextEditingController(
+    text: widget.suggestedAmount > 0.005 ? _plain(widget.suggestedAmount) : '',
+  );
+  final _note = TextEditingController();
+  late String _employee = widget.employee;
+  PaymentMethod _method = PaymentMethod.cash;
+  DateTime _date = DateTime.now();
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _SheetForm(
+    formKey: _formKey,
+    title: 'Pay staff',
+    subtitle: 'Record money given to an employee for their incentives.',
+    children: [
+      SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: [
+            for (final name in staffMembers)
+              ButtonSegment(value: name, label: Text(name)),
+          ],
+          selected: {_employee},
+          onSelectionChanged: (selection) =>
+              setState(() => _employee = selection.first),
+        ),
+      ),
+      const SizedBox(height: 16),
+      priceField(_amount, 'Amount paid', allowZero: false),
+      const SizedBox(height: 16),
+      SegmentedButton<PaymentMethod>(
+        showSelectedIcon: false,
+        segments: [
+          for (final method in PaymentMethod.values)
+            ButtonSegment(value: method, label: Text(method.label)),
+        ],
+        selected: {_method},
+        onSelectionChanged: (selection) =>
+            setState(() => _method = selection.first),
+      ),
+      const SizedBox(height: 16),
+      DatePickerRow(
+        date: _date,
+        onChanged: (date) => setState(() => _date = date),
+      ),
+      const SizedBox(height: 16),
+      TextFormField(
+        controller: _note,
+        maxLength: 100,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(
+          labelText: 'Note (optional)',
+          hintText: 'e.g. Weekly incentive',
+          counterText: '',
+        ),
+      ),
+      const SizedBox(height: 24),
+      FilledButton(
+        onPressed: () {
+          if (!_formKey.currentState!.validate()) return;
+          Navigator.pop(
+            context,
+            StaffPayout(
+              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              employee: _employee,
+              amount: double.parse(_amount.text),
+              method: _method,
+              date: _date,
+              note: _note.text.trim(),
             ),
-            FilledButton(
-              onPressed: () {
-                if (!_formKey.currentState!.validate()) return;
-                Navigator.pop(
-                  context,
-                  Payment(
-                    id: DateTime.now().microsecondsSinceEpoch.toString(),
-                    amount: double.parse(_amount.text),
-                    method: _method,
-                    date: _date,
-                    note: _note.text.trim(),
+          );
+        },
+        child: const Text('Save payout'),
+      ),
+    ],
+  );
+}
+
+/// Formats an amount for a text field: 15 → "15", 16.666 → "16.67".
+String _plain(double value) {
+  final rounded = (value * 100).round() / 100;
+  return rounded == rounded.roundToDouble()
+      ? rounded.toStringAsFixed(0)
+      : rounded.toStringAsFixed(2);
+}
+
+/// Input-styled button: white, bordered, left aligned.
+class _FieldButton extends StatelessWidget {
+  const _FieldButton({
+    required this.onPressed,
+    required this.leading,
+    required this.label,
+    this.caption,
+    this.trailing,
+  });
+
+  final VoidCallback onPressed;
+  final Widget leading;
+  final String label;
+  final String? caption;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.white,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: const BorderSide(color: AppColors.border),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onPressed,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            leading,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.rowTitle,
                   ),
-                );
-              },
-              style: FilledButton.styleFrom(
-                backgroundColor: brandInk,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                  if (caption != null) ...[
+                    const SizedBox(height: 2),
+                    Text(caption!, style: AppText.caption),
+                  ],
+                ],
               ),
-              child: const Text('Save payment'),
             ),
+            ?trailing,
           ],
         ),
       ),
@@ -596,7 +887,7 @@ class DatePickerRow extends StatelessWidget {
   final String label;
 
   @override
-  Widget build(BuildContext context) => OutlinedButton.icon(
+  Widget build(BuildContext context) => _FieldButton(
     onPressed: () async {
       final picked = await showDatePicker(
         context: context,
@@ -606,11 +897,11 @@ class DatePickerRow extends StatelessWidget {
       );
       if (picked != null) onChanged(picked);
     },
-    icon: const Icon(Icons.calendar_month_outlined),
-    label: Text('$label: ${DateFormat('d MMM yyyy').format(date)}'),
-    style: OutlinedButton.styleFrom(
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    leading: const Icon(Icons.calendar_today_outlined, size: 20),
+    label: '$label: ${DateFormat('d MMM yyyy').format(date)}',
+    trailing: const Icon(
+      Icons.chevron_right_rounded,
+      color: AppColors.textFaint,
     ),
   );
 }
@@ -626,12 +917,13 @@ Widget priceField(
   inputFormatters: [
     FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
   ],
-  decoration: InputDecoration(labelText: label),
+  style: const TextStyle(fontFeatures: tabularFigures),
+  decoration: InputDecoration(labelText: label, prefixText: '₹ '),
   onChanged: onChanged,
   validator: (value) {
     final amount = double.tryParse(value ?? '');
     if (amount == null || amount < 0 || (!allowZero && amount == 0)) {
-      return 'Enter an amount greater than zero';
+      return 'Enter an amount above zero';
     }
     return null;
   },

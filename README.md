@@ -16,6 +16,10 @@ Net profit is total sales minus buying cost minus other expenses. Your share is 
 
 With Case Point Supabase configured, sign in with email and password to keep these records in the cloud. The app opens the protected home screen only while a Supabase session exists, responds to sign-in and sign-out events, and restores the signed-in view when a saved session is available. The database also restricts each account to its own records with row-level security. Existing records saved on this device are imported once on first sign-in. Cloud writes require an internet connection; the app shows an error and leaves the entry unchanged if a write fails. Without cloud configuration, the app continues to store records on this device with `shared_preferences`.
 
+## Staff incentives
+
+Each sale records who sold it: Zahir, Ayan, Huzaifa or no one. When an employee makes the sale, they earn the product's fixed incentive for each item (₹15 by default, set per product), even at a discount, plus one third of anything sold above the product's standard price. The incentive comes out of shop profit before the 50/50 split, so each partner covers half. Example: a ₹25 skin with a ₹150 standard price sold at ₹200 earns the employee ₹15 + ₹50 ÷ 3 = ₹31.67, and each partner gets ₹71.67. Sales saved before this feature have no seller and no incentive. Dues → Staff shows what each employee has earned and is owed, and records payouts.
+
 ## Case Point Supabase setup
 
 1. Select the **Case Point** project with reference `kmibtvrlbcyrxoaasdeq`. Do not use another project's URL or key.
@@ -24,7 +28,7 @@ With Case Point Supabase configured, sign in with email and password to keep the
 4. Copy `config/supabase.example.json` to `config/supabase.local.json` and set the project URL and **publishable** key. Never put a service role or secret key in the Flutter app. The local file is gitignored.
 5. Run `flutter run --dart-define-from-file=config/supabase.local.json`.
 
-The table migration was applied on 11 October 2026, and the emoji migration on 14 October 2026. Both changes are already on Case Point; do not run them again with `supabase db push`, because the direct SQL execution did not add CLI migration-history entries. The **D.K Mobiles POS** project was untouched.
+The table migration was applied on 11 October 2026, the emoji migration on 14 October 2026, and the staff incentive migration (`20261121010000_staff_incentives.sql`) on 21 November 2026. Both changes are already on Case Point; do not run them again with `supabase db push`, because the direct SQL execution did not add CLI migration-history entries. The **D.K Mobiles POS** project was untouched.
 
 ## Run
 
