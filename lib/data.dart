@@ -55,6 +55,7 @@ class Sale {
     this.seller,
     this.standardPrice,
     this.incentivePerItem = 0,
+    this.note = '',
   });
 
   final String id;
@@ -73,6 +74,9 @@ class Sale {
   /// The product's standard price and fixed incentive when the sale was made.
   final double? standardPrice;
   final double incentivePerItem;
+
+  /// Optional free-text note, e.g. customer or device.
+  final String note;
 
   double get revenue => price * quantity;
   double get totalCost => cost * quantity;
@@ -110,6 +114,7 @@ class Sale {
     seller: json['seller'] as String?,
     standardPrice: (json['standardPrice'] as num?)?.toDouble(),
     incentivePerItem: (json['incentivePerItem'] as num?)?.toDouble() ?? 0,
+    note: json['note'] as String? ?? '',
   );
 
   Map<String, dynamic> toJson() => {
@@ -123,6 +128,7 @@ class Sale {
     'seller': seller,
     'standardPrice': standardPrice,
     'incentivePerItem': incentivePerItem,
+    'note': note,
   };
 }
 

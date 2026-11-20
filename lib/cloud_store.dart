@@ -82,6 +82,7 @@ class CloudStore {
               standardPrice: (row['standard_price'] as num?)?.toDouble(),
               incentivePerItem:
                   (row['incentive_per_item'] as num?)?.toDouble() ?? 0,
+              note: row['note'] as String? ?? '',
             ),
           )
           .toList(),
@@ -152,6 +153,7 @@ class CloudStore {
           'seller': sale.seller,
           'standard_price': sale.standardPrice,
           'incentive_per_item': sale.incentivePerItem,
+          'note': sale.note,
         },
         onConflict: 'owner_id,client_id',
         ignoreDuplicates: true,

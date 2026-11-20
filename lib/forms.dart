@@ -238,7 +238,13 @@ class _SaleFormState extends State<SaleForm> {
   late Product _selected;
   late final TextEditingController _price;
   late final TextEditingController _quantity;
+  final _otherName = TextEditingController();
+  final _otherCost = TextEditingController();
+  final _note = TextEditingController();
   DateTime _date = DateTime.now();
+
+  /// True when selling something that is not in the product list.
+  bool _other = false;
 
   /// Employee who made the sale; empty when no employee.
   String _seller = staffMembers.contains(appSettings.lastSeller)
@@ -249,7 +255,7 @@ class _SaleFormState extends State<SaleForm> {
   void initState() {
     super.initState();
     _selected = widget.products.first;
-    _price = TextEditingController(text: _selected.price.toString());
+    _price = TextEditingController(text: _plain(_selected.price));
     _quantity = TextEditingController(text: '1');
   }
 
@@ -257,7 +263,18 @@ class _SaleFormState extends State<SaleForm> {
   void dispose() {
     _price.dispose();
     _quantity.dispose();
+    _otherName.dispose();
+    _otherCost.dispose();
+    _note.dispose();
     super.dispose();
+  }
+
+  void _setOther(bool other) {
+    if (other == _other) return;
+    setState(() {
+      _other = other;
+      _price.text = other ? '' : _plain(_selected.price);
+    });
   }
 
   Future<void> _chooseProduct() async {
@@ -283,7 +300,7 @@ class _SaleFormState extends State<SaleForm> {
     if (product == null || !mounted) return;
     setState(() {
       _selected = product;
-      _price.text = product.price.toString();
+      _price.text = _plain(product.price);
     });
   }
 
@@ -302,18 +319,67 @@ class _SaleFormState extends State<SaleForm> {
     return _SheetForm(
       formKey: _formKey,
       title: 'Add a sale',
-      subtitle: 'Choose the product and enter what you sold it for.',
+      subtitle: 'Pick a product, or add an item that isn’t on your list.',
       children: [
-        _FieldButton(
-          onPressed: _chooseProduct,
-          leading: Text(_selected.emoji, style: const TextStyle(fontSize: 22)),
-          label: _selected.name,
-          caption: 'Buys at ${money(_selected.cost)}',
-          trailing: const Icon(
-            Icons.unfold_more_rounded,
-            color: AppColors.textMuted,
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<bool>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(
+                value: false,
+                label: Text('From products'),
+                icon: Icon(Icons.inventory_2_outlined, size: 18),
+              ),
+              ButtonSegment(
+                value: true,
+                label: Text('Other item'),
+                icon: Icon(Icons.edit_outlined, size: 18),
+              ),
+            ],
+            selected: {_other},
+            onSelectionChanged: (selection) => _setOther(selection.first),
           ),
         ),
+        const SizedBox(height: 16),
+        if (!_other)
+          _FieldButton(
+            onPressed: _chooseProduct,
+            leading: Text(
+              _selected.emoji,
+              style: const TextStyle(fontSize: 22),
+            ),
+            label: _selected.name,
+            caption:
+                'Buys at ${money(_selected.cost)} · Standard ${money(_selected.price)}',
+            trailing: const Icon(
+              Icons.unfold_more_rounded,
+              color: AppColors.textMuted,
+            ),
+          )
+        else ...[
+          TextFormField(
+            controller: _otherName,
+            maxLength: 100,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Item name',
+              hintText: 'e.g. Charging cable',
+              counterText: '',
+            ),
+            validator: (value) => value == null || value.trim().isEmpty
+                ? 'Enter what you sold'
+                : null,
+          ),
+          const SizedBox(height: 16),
+          priceField(
+            _otherCost,
+            'Buying cost per item',
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
         const SizedBox(height: 16),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -382,6 +448,19 @@ class _SaleFormState extends State<SaleForm> {
           onChanged: (date) => setState(() => _date = date),
         ),
         const SizedBox(height: 16),
+        TextFormField(
+          controller: _note,
+          maxLength: 200,
+          minLines: 1,
+          maxLines: 3,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            labelText: 'Note (optional)',
+            hintText: 'e.g. Customer name or phone model',
+            counterText: '',
+          ),
+        ),
+        const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
           decoration: BoxDecoration(
@@ -441,18 +520,40 @@ class _SaleFormState extends State<SaleForm> {
     );
   }
 
-  Sale _draft({required double price, required int quantity}) => Sale(
-    id: DateTime.now().microsecondsSinceEpoch.toString(),
-    productName: _selected.name,
-    productEmoji: _selected.emoji,
-    cost: _selected.cost,
-    price: price,
-    quantity: quantity,
-    date: _date,
-    seller: _seller.isEmpty ? null : _seller,
-    standardPrice: _selected.price,
-    incentivePerItem: _selected.incentive,
-  );
+  Sale _draft({required double price, required int quantity}) {
+    final seller = _seller.isEmpty ? null : _seller;
+    final note = _note.text.trim();
+    if (_other) {
+      final name = _otherName.text.trim();
+      return Sale(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        productName: name.isEmpty ? 'Other item' : name,
+        productEmoji: '🏷️',
+        cost: double.tryParse(_otherCost.text) ?? 0,
+        price: price,
+        quantity: quantity,
+        date: _date,
+        seller: seller,
+        // No standard price for one-off items: staff get only the fixed amount.
+        standardPrice: price,
+        incentivePerItem: defaultStaffIncentive,
+        note: note,
+      );
+    }
+    return Sale(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      productName: _selected.name,
+      productEmoji: _selected.emoji,
+      cost: _selected.cost,
+      price: price,
+      quantity: quantity,
+      date: _date,
+      seller: seller,
+      standardPrice: _selected.price,
+      incentivePerItem: _selected.incentive,
+      note: note,
+    );
+  }
 
   String _incentiveBreakdown(Sale sale) {
     final fixed =

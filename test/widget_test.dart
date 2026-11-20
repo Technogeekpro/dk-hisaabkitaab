@@ -234,6 +234,8 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).at(0), '200');
+    await tester.ensureVisible(find.text('Ayan'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Ayan'));
     await tester.pumpAndSettle();
     expect(find.text('Ayan gets'), findsOneWidget);
@@ -245,6 +247,58 @@ void main() {
     expect(saved?.seller, 'Ayan');
     expect(saved?.standardPrice, 150);
     expect(saved?.incentivePerItem, 15);
+  });
+
+  testWidgets('sale form records an item that is not in the product list', (
+    tester,
+  ) async {
+    Sale? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () async {
+                saved = await showModalBottomSheet<Sale>(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => const SaleForm(
+                    products: [
+                      Product(id: 'p', name: 'PAD skin', cost: 25, price: 150),
+                    ],
+                  ),
+                );
+              },
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Other item'));
+    await tester.pumpAndSettle();
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'Charging cable');
+    await tester.enterText(fields.at(1), '30');
+    await tester.enterText(fields.at(2), '100');
+    await tester.enterText(fields.at(4), 'Customer: Ravi');
+    await tester.ensureVisible(find.text('Zahir'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Zahir'));
+    await tester.pumpAndSettle();
+    expect(find.text('Zahir gets'), findsOneWidget);
+    await tester.ensureVisible(find.text('Save sale'));
+    await tester.tap(find.text('Save sale'));
+    await tester.pumpAndSettle();
+    expect(saved?.productName, 'Charging cable');
+    expect(saved?.cost, 30);
+    expect(saved?.price, 100);
+    expect(saved?.note, 'Customer: Ravi');
+    expect(saved?.staffIncentive, 15);
+    expect(saved?.myShare, 27.5);
+    expect(Sale.fromJson(saved!.toJson()).note, 'Customer: Ravi');
   });
 
   testWidgets('the heatmap lets a user choose a sales day', (tester) async {

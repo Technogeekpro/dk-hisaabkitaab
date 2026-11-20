@@ -827,6 +827,7 @@ class _HomePageState extends State<HomePage> {
                   )
                 else
                   GroupedList(
+                    indent: 16,
                     children: [
                       for (final entry in recentEntries.take(5))
                         entry is Sale
@@ -1126,6 +1127,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               GroupedList(
+                indent: 16,
                 children: [
                   for (final sale in groupedSales[day]!)
                     Dismissible(
@@ -1157,6 +1159,7 @@ class _HomePageState extends State<HomePage> {
             )
           else
             GroupedList(
+              indent: 16,
               children: [
                 for (final expense in _expenses)
                   Dismissible(
@@ -1840,50 +1843,38 @@ class _HomePageState extends State<HomePage> {
   DateTime _entryDate(Object entry) =>
       entry is Sale ? entry.date : (entry as Expense).date;
 
+  /// "4:35 PM", or null for sales saved without a time (past dates).
+  String? _timeLabel(DateTime date) => date.hour == 0 && date.minute == 0
+      ? null
+      : DateFormat('h:mm a').format(date);
+
   Widget _saleRow(Sale sale, {bool showDate = true}) {
     final mine = sale.myShare;
-    final details = [
+    final time = _timeLabel(sale.date);
+    final when = [
       if (showDate) DateFormat('d MMM').format(sale.date),
-      sale.quantity == 1
-          ? 'Qty 1'
-          : 'Qty ${sale.quantity} × ${money(sale.price)}',
+      ?time,
+    ].join(', ');
+    final details = [
+      '${sale.quantity} × ${money(sale.price)}',
       if (sale.seller != null) sale.seller!,
-    ].join(' · ');
-    return EntryRow(
-      leading: LeadingBadge(emoji: sale.productEmoji),
+      if (when.isNotEmpty) when,
+    ].join('  ·  ');
+    return _LedgerRow(
       title: sale.productName,
-      subtitle: details,
-      trailing: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(money(sale.revenue), style: AppText.amount),
-          const SizedBox(height: 2),
-          Text(
-            'Mine ${money(mine)}',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: mine < 0 ? AppColors.negative : AppColors.positive,
-              fontFeatures: tabularFigures,
-            ),
-          ),
-        ],
-      ),
+      amount: money(sale.revenue),
+      details: details,
+      secondary: 'Mine ${money(mine)}',
+      secondaryColor: mine < 0 ? AppColors.negative : AppColors.positive,
+      note: sale.note,
     );
   }
 
-  Widget _expenseRow(Expense expense) => EntryRow(
-    leading: const LeadingBadge(
-      icon: Icons.receipt_outlined,
-      background: AppColors.negativeSoft,
-      foreground: AppColors.negative,
-    ),
+  Widget _expenseRow(Expense expense) => _LedgerRow(
     title: expense.note,
-    subtitle: DateFormat('d MMM yyyy').format(expense.date),
-    trailing: Text(
-      '−${money(expense.amount)}',
-      style: AppText.amount.copyWith(color: AppColors.negative),
-    ),
+    amount: '−${money(expense.amount)}',
+    amountColor: AppColors.negative,
+    details: 'Expense  ·  ${DateFormat('d MMM yyyy').format(expense.date)}',
   );
 
   Widget _paymentRow(Payment payment) => EntryRow(
@@ -1896,5 +1887,97 @@ class _HomePageState extends State<HomePage> {
     subtitle:
         '${DateFormat('d MMM yyyy').format(payment.date)}${payment.note.isEmpty ? '' : ' · ${payment.note}'}',
     trailing: Text(money(payment.amount), style: AppText.amount),
+  );
+}
+
+/// Plain two-line ledger row: title and amount on top, details and a
+/// secondary figure below, optional note underneath.
+class _LedgerRow extends StatelessWidget {
+  const _LedgerRow({
+    required this.title,
+    required this.amount,
+    required this.details,
+    this.amountColor,
+    this.secondary,
+    this.secondaryColor,
+    this.note = '',
+  });
+
+  final String title;
+  final String amount;
+  final String details;
+  final Color? amountColor;
+  final String? secondary;
+  final Color? secondaryColor;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.rowTitle,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(amount, style: AppText.amount.copyWith(color: amountColor)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Expanded(
+              child: Text(
+                details,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.caption.copyWith(fontFeatures: tabularFigures),
+              ),
+            ),
+            if (secondary != null) ...[
+              const SizedBox(width: 12),
+              Text(
+                secondary!,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: secondaryColor ?? AppColors.textMuted,
+                  fontFeatures: tabularFigures,
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (note.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              note,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.caption.copyWith(color: AppColors.text),
+            ),
+          ),
+        ],
+      ],
+    ),
   );
 }
