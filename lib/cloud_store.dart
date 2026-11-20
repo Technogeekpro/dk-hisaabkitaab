@@ -15,6 +15,7 @@ typedef AppData = ({
   List<Sale> sales,
   List<Expense> expenses,
   List<Payment> payments,
+  List<StaffPayout> staffPayouts,
 });
 
 class CloudStore {
@@ -51,6 +52,7 @@ class CloudStore {
     final sales = await _all('dk_sales');
     final expenses = await _all('dk_expenses');
     final payments = await _all('dk_payments');
+    final staffPayouts = await _all('dk_staff_payouts');
     final result = (
       products: products
           .map(
@@ -60,6 +62,9 @@ class CloudStore {
               cost: (row['cost'] as num).toDouble(),
               price: (row['price'] as num).toDouble(),
               emoji: row['emoji'] as String? ?? '📱',
+              incentive:
+                  (row['incentive'] as num?)?.toDouble() ??
+                  defaultStaffIncentive,
             ),
           )
           .toList(),
@@ -73,6 +78,11 @@ class CloudStore {
               quantity: row['quantity'] as int,
               date: DateTime.parse(row['sold_at'] as String).toLocal(),
               productEmoji: row['product_emoji'] as String? ?? '📱',
+              seller: row['seller'] as String?,
+              standardPrice: (row['standard_price'] as num?)?.toDouble(),
+              incentivePerItem:
+                  (row['incentive_per_item'] as num?)?.toDouble() ?? 0,
+              note: row['note'] as String? ?? '',
             ),
           )
           .toList(),
@@ -97,10 +107,23 @@ class CloudStore {
             ),
           )
           .toList(),
+      staffPayouts: staffPayouts
+          .map(
+            (row) => StaffPayout(
+              id: row['client_id'] as String,
+              employee: row['employee'] as String,
+              amount: (row['amount'] as num).toDouble(),
+              method: PaymentMethod.values.byName(row['method'] as String),
+              date: DateTime.parse(row['paid_on'] as String),
+              note: row['note'] as String,
+            ),
+          )
+          .toList(),
     );
     result.sales.sort((a, b) => b.date.compareTo(a.date));
     result.expenses.sort((a, b) => b.date.compareTo(a.date));
     result.payments.sort((a, b) => b.date.compareTo(a.date));
+    result.staffPayouts.sort((a, b) => b.date.compareTo(a.date));
     return result;
   }
 
@@ -112,6 +135,7 @@ class CloudStore {
         'cost': product.cost,
         'price': product.price,
         'emoji': product.emoji,
+        'incentive': product.incentive,
       }, onConflict: 'owner_id,client_id');
 
   Future<void> saveSale(Sale sale) => client
@@ -126,6 +150,10 @@ class CloudStore {
           'quantity': sale.quantity,
           'sold_at': sale.date.toUtc().toIso8601String(),
           'product_emoji': sale.productEmoji,
+          'seller': sale.seller,
+          'standard_price': sale.standardPrice,
+          'incentive_per_item': sale.incentivePerItem,
+          'note': sale.note,
         },
         onConflict: 'owner_id,client_id',
         ignoreDuplicates: true,
@@ -160,6 +188,22 @@ class CloudStore {
         ignoreDuplicates: true,
       );
 
+  Future<void> saveStaffPayout(StaffPayout payout) => client
+      .from('dk_staff_payouts')
+      .upsert(
+        {
+          'owner_id': _ownerId,
+          'client_id': payout.id,
+          'employee': payout.employee,
+          'amount': payout.amount,
+          'method': payout.method.name,
+          'paid_on': _date(payout.date),
+          'note': payout.note,
+        },
+        onConflict: 'owner_id,client_id',
+        ignoreDuplicates: true,
+      );
+
   Future<void> delete(String table, String clientId) async {
     await client
         .from(table)
@@ -186,10 +230,14 @@ class CloudStore {
     for (final payment in local.payments) {
       await savePayment(payment);
     }
+    for (final payout in local.staffPayouts) {
+      await saveStaffPayout(payout);
+    }
     await prefs.setBool(key, true);
     await prefs.remove('products');
     await prefs.remove('sales');
     await prefs.remove('expenses');
     await prefs.remove('payments');
+    await prefs.remove('staff_payouts');
   }
 }
